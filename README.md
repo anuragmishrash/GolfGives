@@ -2,6 +2,10 @@
 
 A subscription-driven golf performance + charity fundraising + monthly prize draw platform.
 
+### 🌐 Live Deployment
+- **Frontend (Vercel):** [https://golf-gives-theta.vercel.app](https://golf-gives-theta.vercel.app)
+- **Backend API (Render):** [https://golfgives-api.onrender.com](https://golfgives-api.onrender.com)
+
 ---
 
 ## 🚀 Tech Stack
@@ -119,16 +123,23 @@ Register normally, then in MongoDB Atlas update the user's `role` field to `"adm
 ## 🚢 Deployment
 
 ### Frontend → Vercel
-```bash
-cd client && npm run build
-```
-Set `VITE_API_URL` in Vercel env vars to your Render URL.
+- **Framework Preset:** Vite
+- **Root Directory:** `client`
+- **Environment Variables:**
+  - `VITE_API_URL` = `https://golfgives-api.onrender.com`
+  - `VITE_STRIPE_PUBLISHABLE_KEY` = `your_stripe_pk`
+- The project includes a `vercel.json` file to handle React Router client-side routing.
 
 ### Backend → Render
-- Root: `server/`
-- Build command: `npm install`
-- Start command: `npm start`
-- Add all `.env` values as Render environment variables
+- **Service Type:** Web Service
+- **Environment:** Node
+- **Root Directory:** `server`
+- **Build Command:** `npm install`
+- **Start Command:** `npm start`
+- **Environment Variables:**
+  - Add all `.env` values, including `RESEND_API_KEY` and `RESEND_FROM`.
+  - Set `CLIENT_URL` to `https://golf-gives-theta.vercel.app`.
+  - Set `STRIPE_WEBHOOK_SECRET` to the live webhook secret from the Stripe Dashboard.
 
 ---
 

@@ -82,63 +82,72 @@ const AdminDraws = () => {
           {currentMonth} Draw Control
         </h2>
 
-        <div className="flex flex-col sm:flex-row gap-4 mb-5">
-          <div>
-            <label className="text-warm-white/50 text-xs font-medium block mb-1.5">Draw Type</label>
-            <select
-              value={drawType}
-              onChange={(e) => setDrawType(e.target.value)}
-              className="input-glass w-48"
-              style={{ colorScheme: 'dark' }}
-            >
-              <option value="random">🎲 Random</option>
-              <option value="algorithmic">⚡ Algorithmic</option>
-            </select>
+        {draws.find(d => d.month === currentMonth && d.status === 'published') ? (
+          <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-5 text-center">
+            <h3 className="text-emerald-400 font-semibold mb-1">✅ Draw Completed</h3>
+            <p className="text-warm-white/60 text-sm">The draw for {currentMonth} has been published successfully. Winners have been notified.</p>
           </div>
-        </div>
-
-        <div className="flex flex-wrap gap-3">
-          <button
-            onClick={handleSimulate}
-            disabled={simulating}
-            className="btn-secondary !text-sm !py-2.5 !px-5 !border-gold-500/30 !text-gold-400 hover:!bg-gold-500/10"
-          >
-            {simulating ? (
-              <><div className="w-4 h-4 border-2 border-gold-400/30 border-t-gold-400 rounded-full animate-spin" /> Simulating...</>
-            ) : (
-              <><Play size={14} /> Run Simulation</>
-            )}
-          </button>
-
-          {simulationResult && (
-            <button
-              onClick={() => setConfirmPublish(true)}
-              disabled={publishing}
-              className="btn-gold !text-sm !py-2.5 !px-5"
-            >
-              <Send size={14} />
-              Publish Draw
-            </button>
-          )}
-        </div>
-
-        {/* Confirm publish modal */}
-        {confirmPublish && (
-          <div className="mt-4 bg-red-500/8 border border-red-500/20 rounded-xl p-4">
-            <div className="flex items-center gap-2 mb-3">
-              <AlertTriangle size={15} className="text-red-400" />
-              <span className="text-warm-white font-medium text-sm">Confirm Publish</span>
+        ) : (
+          <>
+            <div className="flex flex-col sm:flex-row gap-4 mb-5">
+              <div>
+                <label className="text-warm-white/50 text-xs font-medium block mb-1.5">Draw Type</label>
+                <select
+                  value={drawType}
+                  onChange={(e) => setDrawType(e.target.value)}
+                  className="input-glass w-48"
+                  style={{ colorScheme: 'dark' }}
+                >
+                  <option value="random">🎲 Random</option>
+                  <option value="algorithmic">⚡ Algorithmic</option>
+                </select>
+              </div>
             </div>
-            <p className="text-warm-white/50 text-xs mb-4">
-              This will finalize results, notify all participants, and create winner records. This cannot be undone.
-            </p>
-            <div className="flex gap-3">
-              <button onClick={handlePublish} disabled={publishing} className="btn-gold !py-2 !px-4 !text-xs">
-                {publishing ? 'Publishing...' : 'Yes, Publish'}
+
+            <div className="flex flex-wrap gap-3">
+              <button
+                onClick={handleSimulate}
+                disabled={simulating}
+                className="btn-secondary !text-sm !py-2.5 !px-5 !border-gold-500/30 !text-gold-400 hover:!bg-gold-500/10"
+              >
+                {simulating ? (
+                  <><div className="w-4 h-4 border-2 border-gold-400/30 border-t-gold-400 rounded-full animate-spin" /> Simulating...</>
+                ) : (
+                  <><Play size={14} /> Run Simulation</>
+                )}
               </button>
-              <button onClick={() => setConfirmPublish(false)} className="btn-secondary !py-2 !px-4 !text-xs">Cancel</button>
+
+              {simulationResult && (
+                <button
+                  onClick={() => setConfirmPublish(true)}
+                  disabled={publishing}
+                  className="btn-gold !text-sm !py-2.5 !px-5"
+                >
+                  <Send size={14} />
+                  Publish Draw
+                </button>
+              )}
             </div>
-          </div>
+
+            {/* Confirm publish modal */}
+            {confirmPublish && (
+              <div className="mt-4 bg-red-500/8 border border-red-500/20 rounded-xl p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <AlertTriangle size={15} className="text-red-400" />
+                  <span className="text-warm-white font-medium text-sm">Confirm Publish</span>
+                </div>
+                <p className="text-warm-white/50 text-xs mb-4">
+                  This will finalize results, notify all participants, and create winner records. This cannot be undone.
+                </p>
+                <div className="flex gap-3">
+                  <button onClick={handlePublish} disabled={publishing} className="btn-gold !py-2 !px-4 !text-xs">
+                    {publishing ? 'Publishing...' : 'Yes, Publish'}
+                  </button>
+                  <button onClick={() => setConfirmPublish(false)} className="btn-secondary !py-2 !px-4 !text-xs">Cancel</button>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
 

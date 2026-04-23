@@ -74,6 +74,14 @@ exports.simulateDraw = asyncHandler(async (req, res) => {
 
   // Get or create the draw document for this month
   let draw = await Draw.findOne({ month });
+  
+  if (draw && draw.status === 'published') {
+    return res.status(400).json({ 
+      success: false, 
+      message: 'The draw for this month has already been published and cannot be altered.' 
+    });
+  }
+
   if (!draw) {
     draw = await Draw.create({ month, drawType, status: 'pending' });
   }
@@ -90,7 +98,7 @@ exports.simulateDraw = asyncHandler(async (req, res) => {
   ]);
   const prizePoolTotal = ((prizePoolAgg[0]?.total || 0) / 100);
   const prizePoolSnapshot = {
-    fiveMatch: prizePoolTotal * 0.40,
+    fiveMatch: (prizePoolTotal * 0.40) + (draw.jackpotAmount || 0),
     fourMatch: prizePoolTotal * 0.35,
     threeMatch: prizePoolTotal * 0.25,
   };
