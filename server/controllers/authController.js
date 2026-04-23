@@ -2,7 +2,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const asyncHandler = require('../utils/asyncHandler');
-const { sendWelcomeEmail } = require('../services/email');
+const emailService = require('../services/emailService');
 
 /**
  * Generate access + refresh token pair for a user
@@ -35,7 +35,7 @@ exports.register = asyncHandler(async (req, res) => {
   await User.findByIdAndUpdate(user._id, { refreshToken });
 
   // Send welcome email (non-blocking)
-  sendWelcomeEmail(user).catch(console.error);
+  emailService.sendWelcomeEmail({ name: user.name, email: user.email });
 
   res.status(201).json({
     success: true,

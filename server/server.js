@@ -14,6 +14,7 @@ const adminRoutes = require('./routes/admin');
 const charityRoutes = require('./routes/charities');
 const winnerRoutes = require('./routes/winners');
 const errorHandler = require('./middleware/errorHandler');
+const { startRenewalScheduler } = require('./services/renewalScheduler');
 
 const app = express();
 
@@ -75,6 +76,7 @@ const startServer = async () => {
     const PORT = process.env.PORT || 5000;
     app.listen(PORT, () => {
       console.log(`🚀 GolfGives API running on port ${PORT}`);
+      startRenewalScheduler();
     });
   } catch (err) {
     console.error('❌ Failed to connect to MongoDB:', err.message);

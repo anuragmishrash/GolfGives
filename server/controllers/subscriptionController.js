@@ -3,6 +3,7 @@ const User = require('../models/User');
 const Subscription = require('../models/Subscription');
 const Charity = require('../models/Charity');
 const asyncHandler = require('../utils/asyncHandler');
+const emailService = require('../services/emailService');
 const { PRIZE_POOL_FROM_SUBSCRIPTION } = require('../utils/constants');
 
 // Global prize pool state — stored in DB via Subscription aggregation
@@ -125,6 +126,17 @@ exports.handleWebhook = async (req, res) => {
             $inc: { totalContributed: charityAmount / 100 }, // Convert cents to dollars
           });
         }
+        
+        const charity = user.selectedCharityId ? await Charity.findById(user.selectedCharityId) : { name: 'the general charity pool' };
+
+        emailService.sendSubscriptionActivatedEmail({
+          name: user.name,
+          email: user.email,
+          plan: plan,
+          renewalDate: stripeSubscription.current_period_end * 1000,
+          charityName: charity.name,
+          charityAmount: (charityAmount / 100).toFixed(2)
+        });
 
         console.log(`✅ Subscription activated for user ${userId}`);
         break;
@@ -141,6 +153,7 @@ exports.handleWebhook = async (req, res) => {
         await User.findByIdAndUpdate(userId, {
           subscriptionStatus: status,
           subscriptionRenewalDate: new Date(sub.current_period_end * 1000),
+          renewalReminderSent: false
         });
         break;
       }
@@ -149,7 +162,15 @@ exports.handleWebhook = async (req, res) => {
         const sub = event.data.object;
         const userId = sub.metadata?.userId;
         if (!userId) break;
-        await User.findByIdAndUpdate(userId, { subscriptionStatus: 'cancelled' });
+        const user = await User.findByIdAndUpdate(userId, { subscriptionStatus: 'cancelled' });
+        
+        if (user) {
+          emailService.sendSubscriptionCancelledEmail({
+            name: user.name,
+            email: user.email,
+            accessUntil: sub.current_period_end
+          });
+        }
         break;
       }
 
@@ -159,6 +180,12 @@ exports.handleWebhook = async (req, res) => {
         const user = await User.findOne({ stripeCustomerId: invoice.customer });
         if (user) {
           await User.findByIdAndUpdate(user._id, { subscriptionStatus: 'lapsed' });
+          emailService.sendPaymentFailedEmail({
+            name: user.name,
+            email: user.email,
+            amount: (invoice.amount_due / 100).toFixed(2),
+            retryDate: invoice.next_payment_attempt ? new Date(invoice.next_payment_attempt * 1000).toLocaleDateString() : 'a later date'
+          });
         }
         break;
       }

@@ -66,6 +66,10 @@ const userSchema = new mongoose.Schema({
     type: Date,
     default: null,
   },
+  renewalReminderSent: {
+    type: Boolean,
+    default: false,
+  },
   selectedCharityId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Charity',

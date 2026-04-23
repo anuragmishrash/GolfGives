@@ -6,7 +6,7 @@ const WinnerVerification = require('../models/WinnerVerification');
 const SummaryCache = require('../models/SummaryCache');
 const asyncHandler = require('../utils/asyncHandler');
 const { runDraw, matchUserScores, calculatePrizes } = require('../services/drawEngine');
-const { sendDrawPublishedEmail, sendWinnerEmail } = require('../services/email');
+const emailService = require('../services/emailService');
 
 // ── GET /api/admin/users ───────────────────────────────────────────────────────
 exports.getUsers = asyncHandler(async (req, res) => {
@@ -207,12 +207,36 @@ exports.publishDraw = asyncHandler(async (req, res) => {
     });
     // Update user's total winnings
     await User.findByIdAndUpdate(prize.userId, { $inc: { totalWinnings: prize.prizeAmount } });
-    // Send winner notification email (non-blocking)
-    sendWinnerEmail(prize.userId, draw.month, prize.matchType, prize.prizeAmount).catch(console.error);
   }
 
-  // Notify all participants about the draw results (non-blocking)
-  sendDrawPublishedEmail(draw._id, draw.month, draw.winningNumbers).catch(console.error);
+  const allActiveUsers = await User.find({ subscriptionStatus: 'active' }).populate('selectedCharityId');
+  
+  for (const user of allActiveUsers) {
+    const userResult = draw.results.find(r => r.userId.toString() === user._id.toString());
+    const participated = user.scores && user.scores.length === 5;
+    const matchType = userResult?.matchType || null;
+    const prizeAmount = userResult?.prizeAmount || 0;
+
+    // Send draw result email to every active subscriber
+    emailService.sendDrawPublishedEmail({
+      name: user.name,
+      email: user.email,
+      month: draw.month,
+      participated,
+      matchType,
+      prizeAmount
+    });
+
+    // Send additional verification request to winners
+    if (matchType) {
+      emailService.sendWinnerVerificationRequestEmail({
+        name: user.name,
+        email: user.email,
+        matchType,
+        prizeAmount
+      });
+    }
+  }
 
   res.json({ success: true, data: draw });
 });
@@ -264,13 +288,32 @@ exports.verifyWinner = asyncHandler(async (req, res) => {
   ).populate('userId', 'name email').lean();
 
   if (!winner) return res.status(404).json({ success: false, message: 'Winner not found' });
+  
+  if (status === 'approved') {
+    await emailService.sendWinnerApprovedEmail({
+      name: winner.userId.name,
+      email: winner.userId.email,
+      prizeAmount: winner.prizeAmount,
+      paymentMethod: 'Bank Transfer'
+    });
+  }
+
+  if (status === 'rejected') {
+    await emailService.sendWinnerRejectedEmail({
+      name: winner.userId.name,
+      email: winner.userId.email,
+      prizeAmount: winner.prizeAmount,
+      adminNote: adminNote || null
+    });
+  }
+
   res.json({ success: true, data: winner });
 });
 
 // ── PUT /api/admin/winners/:id/payout ─────────────────────────────────────────
 exports.markPayout = asyncHandler(async (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ success: false, message: 'Admin access required' });
-  const winner = await WinnerVerification.findById(req.params.id);
+  const winner = await WinnerVerification.findById(req.params.id).populate('userId', 'name email');
   if (!winner) return res.status(404).json({ success: false, message: 'Winner not found' });
   if (winner.status !== 'approved') {
     return res.status(400).json({ success: false, message: 'Winner must be approved before payout' });
@@ -278,9 +321,16 @@ exports.markPayout = asyncHandler(async (req, res) => {
 
   // Mark the draw result as paid
   await Draw.updateOne(
-    { _id: winner.drawId, 'results.userId': winner.userId },
+    { _id: winner.drawId, 'results.userId': winner.userId._id },
     { $set: { 'results.$.paymentStatus': 'paid' } }
   );
+  
+  await emailService.sendPayoutCompletedEmail({
+    name: winner.userId.name,
+    email: winner.userId.email,
+    prizeAmount: winner.prizeAmount,
+    paymentReference: req.body.paymentReference || `GG-${Date.now()}`
+  });
 
   res.json({ success: true, message: 'Payout marked successfully' });
 });
