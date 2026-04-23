@@ -2,6 +2,7 @@ const { Resend } = require('resend');
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 const FROM = process.env.RESEND_FROM;
+const CLIENT_URL = process.env.CLIENT_URL ? process.env.CLIENT_URL.replace(/\/$/, '') : 'http://localhost:5173';
 
 function baseTemplate(content) {
   return `
@@ -78,7 +79,7 @@ async function sendWelcomeEmail({ name, email }) {
       <p style="color:#9ca3af; font-size:15px; line-height:1.7; margin:0 0 24px;">
         Together, we can make a <span style="color:#10b981; font-weight:600;">real impact</span> through the game we love.
       </p>
-      <a href="https://golfgives.com/dashboard/overview" style="display:inline-block; background:#10b981; color:#fff; padding:14px 32px; border-radius:50px; text-decoration:none; font-weight:600; font-size:15px; margin-top:8px;">Go to Your Dashboard</a>
+      <a href="${CLIENT_URL}/dashboard/overview" style="display:inline-block; background:#10b981; color:#fff; padding:14px 32px; border-radius:50px; text-decoration:none; font-weight:600; font-size:15px; margin-top:8px;">Go to Your Dashboard</a>
     `);
     
     console.log(`[Email] Sending welcome email to ${email}`);
@@ -112,7 +113,7 @@ async function sendSubscriptionActivatedEmail({ name, email, plan, renewalDate, 
       <p style="color:#9ca3af; font-size:15px; line-height:1.7; margin:0 0 24px;">
         You can now enter your golf scores and participate in monthly draws.
       </p>
-      <a href="https://golfgives.com/dashboard/scores" style="display:inline-block; background:#10b981; color:#fff; padding:14px 32px; border-radius:50px; text-decoration:none; font-weight:600; font-size:15px; margin-top:8px;">Enter Your Scores</a>
+      <a href="${CLIENT_URL}/dashboard/scores" style="display:inline-block; background:#10b981; color:#fff; padding:14px 32px; border-radius:50px; text-decoration:none; font-weight:600; font-size:15px; margin-top:8px;">Enter Your Scores</a>
     `);
 
     console.log(`[Email] Sending subscription activated email to ${email}`);
@@ -143,7 +144,7 @@ async function sendSubscriptionRenewalReminderEmail({ name, email, plan, renewal
       <p style="color:#9ca3af; font-size:15px; line-height:1.7; margin:0 0 24px;">
         No action needed — we'll handle this automatically. To cancel, visit your settings before the renewal date.
       </p>
-      <a href="https://golfgives.com/dashboard/settings" style="display:inline-block; background:#10b981; color:#fff; padding:14px 32px; border-radius:50px; text-decoration:none; font-weight:600; font-size:15px; margin-top:8px;">Manage Subscription</a>
+      <a href="${CLIENT_URL}/dashboard/settings" style="display:inline-block; background:#10b981; color:#fff; padding:14px 32px; border-radius:50px; text-decoration:none; font-weight:600; font-size:15px; margin-top:8px;">Manage Subscription</a>
     `);
 
     console.log(`[Email] Sending renewal reminder email to ${email}`);
@@ -172,7 +173,7 @@ async function sendSubscriptionCancelledEmail({ name, email, accessUntil }) {
       <p style="color:#9ca3af; font-size:15px; line-height:1.7; margin:0 0 24px;">
         Your scores and draw history are saved. Come back anytime. Your charity contributions made a real difference — thank you.
       </p>
-      <a href="https://golfgives.com/subscribe" style="display:inline-block; background:#10b981; color:#fff; padding:14px 32px; border-radius:50px; text-decoration:none; font-weight:600; font-size:15px; margin-top:8px;">Resubscribe</a>
+      <a href="${CLIENT_URL}/subscribe" style="display:inline-block; background:#10b981; color:#fff; padding:14px 32px; border-radius:50px; text-decoration:none; font-weight:600; font-size:15px; margin-top:8px;">Resubscribe</a>
     `);
 
     console.log(`[Email] Sending subscription cancelled email to ${email}`);
@@ -202,7 +203,7 @@ async function sendPaymentFailedEmail({ name, email, amount, retryDate }) {
       <p style="color:#9ca3af; font-size:15px; line-height:1.7; margin:0 0 24px;">
         Your subscription has been paused. Update your payment method to continue entering scores and participating in draws. Stripe will retry automatically on ${retryDate}.
       </p>
-      <a href="https://golfgives.com/subscribe" style="display:inline-block; background:#10b981; color:#fff; padding:14px 32px; border-radius:50px; text-decoration:none; font-weight:600; font-size:15px; margin-top:8px;">Update Payment Method</a>
+      <a href="${CLIENT_URL}/subscribe" style="display:inline-block; background:#10b981; color:#fff; padding:14px 32px; border-radius:50px; text-decoration:none; font-weight:600; font-size:15px; margin-top:8px;">Update Payment Method</a>
     `);
 
     console.log(`[Email] Sending payment failed email to ${email}`);
@@ -235,7 +236,7 @@ async function sendDrawPublishedEmail({ name, email, month, participated, matchT
         <div style="background:#1a1a24; border-radius:12px; padding:20px 24px; border:1px solid rgba(255,255,255,0.06); margin:0 0 20px;">
           <p style="margin:0; color:#f5f0eb;">Enter your scores now to ensure you're in the next one!</p>
         </div>
-        <a href="https://golfgives.com/dashboard/scores" style="display:inline-block; background:#10b981; color:#fff; padding:14px 32px; border-radius:50px; text-decoration:none; font-weight:600; font-size:15px; margin-top:8px;">Enter Scores Now</a>
+        <a href="${CLIENT_URL}/dashboard/scores" style="display:inline-block; background:#10b981; color:#fff; padding:14px 32px; border-radius:50px; text-decoration:none; font-weight:600; font-size:15px; margin-top:8px;">Enter Scores Now</a>
       `;
     } else if (participated && !matchType) {
       content = `
@@ -243,7 +244,7 @@ async function sendDrawPublishedEmail({ name, email, month, participated, matchT
         <p style="color:#9ca3af; font-size:15px; line-height:1.7; margin:0 0 24px;">
           You were entered in this month's draw but didn't match enough numbers. Keep entering your scores — the jackpot is rolling over!
         </p>
-        <a href="https://golfgives.com/dashboard/draws" style="display:inline-block; background:#10b981; color:#fff; padding:14px 32px; border-radius:50px; text-decoration:none; font-weight:600; font-size:15px; margin-top:8px;">View Draw Results</a>
+        <a href="${CLIENT_URL}/dashboard/draws" style="display:inline-block; background:#10b981; color:#fff; padding:14px 32px; border-radius:50px; text-decoration:none; font-weight:600; font-size:15px; margin-top:8px;">View Draw Results</a>
       `;
     } else if (matchType === '3-match') {
       content = `
@@ -251,7 +252,7 @@ async function sendDrawPublishedEmail({ name, email, month, participated, matchT
         <div style="background:#064e3b; border-radius:12px; padding:20px 24px; border:1px solid #10b981; margin:0 0 20px;">
           <p style="margin:0; color:#f5f0eb; font-size:18px;">Prize Amount: <strong>£${Number(prizeAmount).toFixed(2)}</strong></p>
         </div>
-        <a href="https://golfgives.com/dashboard/winnings" style="display:inline-block; background:#10b981; color:#fff; padding:14px 32px; border-radius:50px; text-decoration:none; font-weight:600; font-size:15px; margin-top:8px;">Claim Your Prize</a>
+        <a href="${CLIENT_URL}/dashboard/winnings" style="display:inline-block; background:#10b981; color:#fff; padding:14px 32px; border-radius:50px; text-decoration:none; font-weight:600; font-size:15px; margin-top:8px;">Claim Your Prize</a>
       `;
     } else if (matchType === '4-match') {
       content = `
@@ -259,7 +260,7 @@ async function sendDrawPublishedEmail({ name, email, month, participated, matchT
         <div style="background:#2d2000; border-radius:12px; padding:20px 24px; border:1px solid #f59e0b; margin:0 0 20px;">
           <p style="margin:0; color:#f59e0b; font-size:20px;"><strong>Prize Amount: £${Number(prizeAmount).toFixed(2)}</strong></p>
         </div>
-        <a href="https://golfgives.com/dashboard/winnings" style="display:inline-block; background:#10b981; color:#fff; padding:14px 32px; border-radius:50px; text-decoration:none; font-weight:600; font-size:15px; margin-top:8px;">Claim Your Prize</a>
+        <a href="${CLIENT_URL}/dashboard/winnings" style="display:inline-block; background:#10b981; color:#fff; padding:14px 32px; border-radius:50px; text-decoration:none; font-weight:600; font-size:15px; margin-top:8px;">Claim Your Prize</a>
       `;
     } else if (matchType === '5-match') {
       content = `
@@ -270,7 +271,7 @@ async function sendDrawPublishedEmail({ name, email, month, participated, matchT
         <p style="color:#f5f0eb; font-size:16px; line-height:1.7; margin:0 0 24px; font-weight:600;">
           Submit your score verification proof to claim your prize.
         </p>
-        <a href="https://golfgives.com/dashboard/winnings" style="display:inline-block; background:#f59e0b; color:#fff; padding:16px 36px; border-radius:50px; text-decoration:none; font-weight:bold; font-size:16px; margin-top:8px;">Submit Proof Now</a>
+        <a href="${CLIENT_URL}/dashboard/winnings" style="display:inline-block; background:#f59e0b; color:#fff; padding:16px 36px; border-radius:50px; text-decoration:none; font-weight:bold; font-size:16px; margin-top:8px;">Submit Proof Now</a>
       `;
     }
 
@@ -302,7 +303,7 @@ async function sendWinnerVerificationRequestEmail({ name, email, matchType, priz
         <li>Payment sent once verified</li>
       </ol>
       <p style="color:#9ca3af; font-size:14px; margin:0 0 24px;"><em>Note: Verification must be submitted within 14 days.</em></p>
-      <a href="https://golfgives.com/dashboard/winnings" style="display:inline-block; background:#10b981; color:#fff; padding:14px 32px; border-radius:50px; text-decoration:none; font-weight:600; font-size:15px; margin-top:8px;">Upload Proof Now</a>
+      <a href="${CLIENT_URL}/dashboard/winnings" style="display:inline-block; background:#10b981; color:#fff; padding:14px 32px; border-radius:50px; text-decoration:none; font-weight:600; font-size:15px; margin-top:8px;">Upload Proof Now</a>
     `);
 
     console.log(`[Email] Sending verification request email to ${email}`);
@@ -333,7 +334,7 @@ async function sendWinnerApprovedEmail({ name, email, prizeAmount, paymentMethod
       <p style="color:#9ca3af; font-size:15px; line-height:1.7; margin:0 0 24px;">
         Expect your payment within 3-5 business days via ${paymentMethod}.
       </p>
-      <a href="https://golfgives.com/dashboard/winnings" style="display:inline-block; background:#10b981; color:#fff; padding:14px 32px; border-radius:50px; text-decoration:none; font-weight:600; font-size:15px; margin-top:8px;">View Winnings</a>
+      <a href="${CLIENT_URL}/dashboard/winnings" style="display:inline-block; background:#10b981; color:#fff; padding:14px 32px; border-radius:50px; text-decoration:none; font-weight:600; font-size:15px; margin-top:8px;">View Winnings</a>
     `);
 
     console.log(`[Email] Sending winner approved email to ${email}`);
@@ -398,7 +399,7 @@ async function sendPayoutCompletedEmail({ name, email, prizeAmount, paymentRefer
       <p style="color:#9ca3af; font-size:15px; line-height:1.7; margin:0 0 24px;">
         Thank you for playing — and for supporting charity through GolfGives.
       </p>
-      <a href="https://golfgives.com/dashboard/winnings" style="display:inline-block; background:#10b981; color:#fff; padding:14px 32px; border-radius:50px; text-decoration:none; font-weight:600; font-size:15px; margin-top:8px;">View Winnings History</a>
+      <a href="${CLIENT_URL}/dashboard/winnings" style="display:inline-block; background:#10b981; color:#fff; padding:14px 32px; border-radius:50px; text-decoration:none; font-weight:600; font-size:15px; margin-top:8px;">View Winnings History</a>
     `);
 
     console.log(`[Email] Sending payout completed email to ${email}`);
