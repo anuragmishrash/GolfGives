@@ -1,65 +1,107 @@
+/**
+ * seedAdmin.js — Supabase version
+ * 
+ * Seeds an admin user and a test subscriber in Supabase.
+ * Run: node scripts/seedAdmin.js
+ * 
+ * NOTE: Supabase Auth handles password hashing — no bcrypt needed.
+ */
 require('dotenv').config({ path: __dirname + '/../.env' });
-const mongoose = require('mongoose');
-const bcrypt = require('bcryptjs');
-const User = require('../models/User');
+const { supabase } = require('../lib/supabase');
 
 const seedData = async () => {
   try {
-    await mongoose.connect(process.env.MONGODB_URI);
-    console.log('✅ Connected to MongoDB');
+    console.log('🌱 Seeding Supabase database...');
 
-    // 1. Seed Admin
+    // ── 1. Seed Admin User ──────────────────────────────────────────────────
     const adminEmail = 'itsanuragmishra99@gmail.com';
     const adminPass = '987654321Anu';
-    let admin = await User.findOne({ email: adminEmail });
 
-    if (!admin) {
-      const passwordHash = await bcrypt.hash(adminPass, 12);
-      admin = await User.create({
-        name: 'Anurag Mishra (Admin)',
+    // Check if admin already exists in profiles
+    const { data: existingAdmin } = await supabase
+      .from('profiles')
+      .select('id, role')
+      .eq('email', adminEmail)
+      .single();
+
+    if (existingAdmin) {
+      // Update role to admin if not already
+      await supabase
+        .from('profiles')
+        .update({ role: 'admin', subscription_status: 'active' })
+        .eq('id', existingAdmin.id);
+      console.log('✅ Existing user updated to Admin role');
+    } else {
+      // Create via Supabase Auth
+      const { data: authData, error: signUpError } = await supabase.auth.signUp({
         email: adminEmail,
-        passwordHash,
-        role: 'admin',
-        subscriptionStatus: 'active',
+        password: adminPass,
+        options: { data: { full_name: 'Anurag Mishra (Admin)' } },
       });
-      console.log('✅ Admin user created successfully');
-    } else {
-      admin.role = 'admin';
-      admin.subscriptionStatus = 'active';
-      await admin.save();
-      console.log('✅ Existing user updated to Admin successfully');
+
+      if (signUpError) {
+        console.error('❌ Admin signup error:', signUpError.message);
+      } else {
+        // Upsert profile with admin role
+        await supabase.from('profiles').upsert({
+          id: authData.user.id,
+          email: adminEmail,
+          full_name: 'Anurag Mishra (Admin)',
+          role: 'admin',
+          subscription_status: 'active',
+        });
+        console.log('✅ Admin user created:', adminEmail);
+      }
     }
 
-    // 2. Seed Test Subscriber
+    // ── 2. Seed Test Subscriber ─────────────────────────────────────────────
     const subEmail = 'test@golfgives.com';
-    let sub = await User.findOne({ email: subEmail });
 
-    if (!sub) {
-      const passwordHash = await bcrypt.hash('Test@123456', 12);
-      
-      const now = new Date();
-      // Generate 5 distinct dates
-      const scores = [
-        { score: 42, date: new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000) },
-        { score: 38, date: new Date(now.getTime() - 4 * 24 * 60 * 60 * 1000) },
-        { score: 40, date: new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000) },
-        { score: 45, date: new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000) },
-        { score: 35, date: new Date(now.getTime() - 1 * 24 * 60 * 60 * 1000) },
-      ];
+    const { data: existingSub } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('email', subEmail)
+      .single();
 
-      sub = await User.create({
-        name: 'Test Subscriber',
-        email: subEmail,
-        passwordHash,
-        role: 'subscriber',
-        subscriptionStatus: 'active',
-        scores,
-      });
-      console.log('✅ Test subscriber seeded successfully');
+    if (existingSub) {
+      console.log('ℹ️  Test subscriber already exists');
     } else {
-      console.log('ℹ️ Test subscriber already exists');
+      const { data: subAuthData, error: subSignUpError } = await supabase.auth.signUp({
+        email: subEmail,
+        password: 'Test@123456',
+        options: { data: { full_name: 'Test Subscriber' } },
+      });
+
+      if (subSignUpError) {
+        console.error('❌ Subscriber signup error:', subSignUpError.message);
+      } else {
+        const subId = subAuthData.user.id;
+
+        await supabase.from('profiles').upsert({
+          id: subId,
+          email: subEmail,
+          full_name: 'Test Subscriber',
+          role: 'subscriber',
+          subscription_status: 'active',
+        });
+
+        // Seed 5 scores for the test subscriber
+        const now = new Date();
+        const scores = [
+          { user_id: subId, score: 42, score_date: new Date(now - 5 * 86400000).toISOString().split('T')[0] },
+          { user_id: subId, score: 38, score_date: new Date(now - 4 * 86400000).toISOString().split('T')[0] },
+          { user_id: subId, score: 40, score_date: new Date(now - 3 * 86400000).toISOString().split('T')[0] },
+          { user_id: subId, score: 45, score_date: new Date(now - 2 * 86400000).toISOString().split('T')[0] },
+          { user_id: subId, score: 35, score_date: new Date(now - 1 * 86400000).toISOString().split('T')[0] },
+        ];
+
+        const { error: scoresError } = await supabase.from('scores').insert(scores);
+        if (scoresError) console.error('Score insert error:', scoresError.message);
+        else console.log('✅ Test subscriber created with 5 scores:', subEmail);
+      }
     }
 
+    console.log('\n🎉 Seeding complete!');
     process.exit(0);
   } catch (error) {
     console.error('❌ Error seeding data:', error);

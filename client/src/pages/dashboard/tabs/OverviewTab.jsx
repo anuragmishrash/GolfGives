@@ -1,10 +1,14 @@
 import React, { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Trophy, Heart, Calendar, TrendingUp, ChevronRight, Clock, AlertCircle } from 'lucide-react';
-import { format, differenceInDays, endOfMonth } from 'date-fns';
+import { format, endOfMonth } from 'date-fns';
 import { useAuth } from '../../../context/AuthContext';
 import { useSubscription } from '../../../context/SubscriptionContext';
+import { subscriptionAPI } from '../../../api/subscription';
+import { getPrizePool } from '../../../api/prizePool';
+import { supabase } from '../../../lib/supabase';
+import toast from 'react-hot-toast';
 
 // ── Draw Countdown ─────────────────────────────────────────────────────────────
 const DrawCountdown = () => {
@@ -71,15 +75,56 @@ const KPICard = ({ icon: Icon, label, value, sub, color = 'emerald', delay = 0 }
 );
 
 const OverviewTab = () => {
-  const { user } = useAuth();
-  const { prizePool, loading } = useSubscription();
+  const { user, refreshUser } = useAuth();
+  const { subscription, isActive } = useSubscription();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [verifying, setVerifying] = useState(false);
+  const [totalPrize, setTotalPrize] = useState(0);
+  const [scoresCount, setScoresCount] = useState(0);
 
-  const totalPrize = prizePool
-    ? (prizePool.fiveMatch + prizePool.fourMatch + prizePool.threeMatch).toFixed(2)
-    : '—';
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      // Fetch dynamic prize pool
+      const pool = await getPrizePool();
+      setTotalPrize(pool.total);
 
-  const scoresEntered = user?.scores?.length || 0;
-  const eligible = scoresEntered === 5 && user?.subscriptionStatus === 'active';
+      // Fetch dynamic score count for current user
+      if (user?.id) {
+        const { count } = await supabase
+          .from('scores')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', user.id);
+        setScoresCount(count || 0);
+      }
+    };
+    fetchDashboardData();
+  }, [user?.id]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const sessionId = params.get('session_id');
+    
+    if (sessionId) {
+      const verify = async () => {
+        try {
+          setVerifying(true);
+          await subscriptionAPI.verifySession(sessionId);
+          await refreshUser(); // Fetch updated active profile
+          toast.success('Subscription activated successfully! 🎉');
+        } catch (err) {
+          console.error('Session verify failed:', err);
+        } finally {
+          setVerifying(false);
+          // Clear URL query params
+          navigate('/dashboard/overview', { replace: true });
+        }
+      };
+      verify();
+    }
+  }, [location, navigate, refreshUser]);
+
+  const eligible = scoresCount === 5 && isActive;
 
   return (
     <motion.div
@@ -104,23 +149,34 @@ const OverviewTab = () => {
         animate={{ opacity: 1 }}
         className="mb-6"
       >
-        {user?.subscriptionStatus === 'active' && (
+        {verifying && (
+          <div className="flex items-center justify-between gap-3 rounded-xl p-4 bg-emerald-500/8 border border-emerald-500/20 mb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-5 h-5 border-2 border-emerald-400/30 border-t-emerald-400 rounded-full animate-spin" />
+              <div className="text-warm-white text-sm font-medium">
+                Verifying your payment securely...
+              </div>
+            </div>
+          </div>
+        )}
+
+        {!verifying && isActive && (
           <div className="flex items-start justify-between gap-3 rounded-xl p-4 bg-emerald-500/8 border border-emerald-500/20">
             <div className="flex items-center gap-3">
               <AlertCircle size={18} className="text-emerald-400" />
               <div className="text-warm-white text-sm font-medium">
-                Your subscription is active {user.subscriptionRenewalDate && `· Renews on ${format(new Date(user.subscriptionRenewalDate), 'MMM d, yyyy')}`}
+                Your subscription is active {subscription?.subscription_renewal_date && `· Renews on ${format(new Date(subscription.subscription_renewal_date), 'MMM d, yyyy')}`}
               </div>
             </div>
             {!eligible && (
               <div className="text-emerald-400 text-sm font-medium">
-                Need {5 - scoresEntered} more scores to enter draw!
+                Need {5 - scoresCount} more scores to enter draw!
               </div>
             )}
           </div>
         )}
 
-        {user?.subscriptionStatus === 'inactive' && (
+        {!verifying && subscription?.subscription_status === 'inactive' && (
           <div className="flex items-center justify-between gap-3 rounded-xl p-4 bg-gold-500/8 border border-gold-500/20">
             <div className="flex items-center gap-3">
               <AlertCircle size={18} className="text-gold-400" />
@@ -134,12 +190,12 @@ const OverviewTab = () => {
           </div>
         )}
 
-        {user?.subscriptionStatus === 'cancelled' && (
+        {subscription?.subscription_status === 'cancelled' && (
           <div className="flex items-center justify-between gap-3 rounded-xl p-4 bg-gold-500/8 border border-gold-500/20">
             <div className="flex items-center gap-3">
               <AlertCircle size={18} className="text-gold-400" />
               <div className="text-warm-white text-sm font-medium">
-                Your subscription has been cancelled {user.subscriptionRenewalDate && `· Access ends on ${format(new Date(user.subscriptionRenewalDate), 'MMM d, yyyy')}`}
+                Your subscription has been cancelled {subscription.subscription_renewal_date && `· Access ends on ${format(new Date(subscription.subscription_renewal_date), 'MMM d, yyyy')}`}
               </div>
             </div>
             <Link to="/subscribe" className="btn-primary !py-1.5 !px-4 !text-xs">
@@ -148,7 +204,7 @@ const OverviewTab = () => {
           </div>
         )}
 
-        {user?.subscriptionStatus === 'lapsed' && (
+        {subscription?.subscription_status === 'lapsed' && (
           <div className="flex items-center justify-between gap-3 rounded-xl p-4 bg-red-500/8 border border-red-500/20">
             <div className="flex items-center gap-3">
               <AlertCircle size={18} className="text-red-400" />
@@ -168,7 +224,7 @@ const OverviewTab = () => {
         <KPICard
           icon={Trophy}
           label="Prize Pool"
-          value={`£${totalPrize}`}
+          value={`£${totalPrize.toFixed(2)}`}
           sub="This month, all tiers"
           color="gold"
           delay={0}
@@ -176,8 +232,8 @@ const OverviewTab = () => {
         <KPICard
           icon={TrendingUp}
           label="Scores Entered"
-          value={`${scoresEntered}/5`}
-          sub={eligible ? '✓ Draw eligible' : 'Need 5 to enter'}
+          value={`${scoresCount}/5`}
+          sub={eligible ? '✓ Draw eligible' : `Need ${5 - scoresCount} to enter`}
           color={eligible ? 'emerald' : 'gray'}
           delay={0.1}
         />
@@ -192,12 +248,12 @@ const OverviewTab = () => {
         <KPICard
           icon={Calendar}
           label="Subscription"
-          value={user?.subscriptionStatus === 'active' ? 'Active' : 'Inactive'}
-          sub={user?.subscriptionRenewalDate
-            ? `Renews ${format(new Date(user.subscriptionRenewalDate), 'MMM d')}`
-            : user?.subscriptionStatus === 'active' ? 'Ongoing' : 'Subscribe to play'
+          value={isActive ? 'Active' : 'Inactive'}
+          sub={subscription?.subscription_renewal_date
+            ? `Renews ${format(new Date(subscription.subscription_renewal_date), 'MMM d')}`
+            : isActive ? 'Ongoing' : 'Subscribe to play'
           }
-          color={user?.subscriptionStatus === 'active' ? 'emerald' : 'gray'}
+          color={isActive ? 'emerald' : 'gray'}
           delay={0.3}
         />
       </div>
@@ -235,7 +291,7 @@ const OverviewTab = () => {
           {user?.selectedCharityId ? (
             <>
               <div className="text-warm-white font-semibold mb-1">{user.selectedCharityId.name || 'Selected Charity'}</div>
-              <div className="text-warm-white/35 text-sm">{user.charityContributionPercent}% of your subscription goes here</div>
+              <div className="text-warm-white/35 text-sm">{user.charityContributionPercent || 10}% of your subscription goes here</div>
             </>
           ) : (
             <div>

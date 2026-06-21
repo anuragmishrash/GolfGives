@@ -6,14 +6,16 @@ import { z } from 'zod';
 import { User, Heart, AlertTriangle, Save } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../../context/AuthContext';
+import { useSubscription } from '../../../context/SubscriptionContext';
 import { userAPI } from '../../../api/user';
-import { charityAPI } from '../../../api/charity';
-import { subscriptionAPI } from '../../../api/subscription';
+import { formatError } from '../../../utils/errorFormatter';
+import { supabase } from '../../../lib/supabase';
 
 const profileSchema = z.object({ name: z.string().min(2, 'Name must be at least 2 characters') });
 
 const SettingsTab = () => {
   const { user, refreshUser } = useAuth();
+  const { subscription, isActive, refetch: refetchSubscription } = useSubscription();
   const [charities, setCharities] = useState([]);
   const [cancelConfirm, setCancelConfirm] = useState(false);
   const [cancelling, setCancelling] = useState(false);
@@ -23,13 +25,37 @@ const SettingsTab = () => {
     defaultValues: { name: user?.name || '' },
   });
 
-  const [selectedCharity, setSelectedCharity] = useState(user?.selectedCharityId?._id || user?.selectedCharityId || '');
-  const [charityPercent, setCharityPercent] = useState(user?.charityContributionPercent || 10);
+  const [selectedCharity, setSelectedCharity] = useState('');
+  const [charityPercent, setCharityPercent] = useState(10);
   const [savingCharity, setSavingCharity] = useState(false);
 
   useEffect(() => {
-    charityAPI.getCharities({ limit: 50 }).then((res) => setCharities(res.data.data || [])).catch(() => {});
-  }, []);
+    const fetchCharityData = async () => {
+      if (!user?.id) return;
+      
+      // Fetch charities list
+      const { data: charitiesList } = await supabase
+        .from('charities')
+        .select('id, name')
+        .order('name');
+        
+      setCharities(charitiesList || []);
+
+      // Fetch user's current charity preferences directly
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('charity_id, charity_percentage')
+        .eq('id', user.id)
+        .single();
+
+      if (profile) {
+        setSelectedCharity(profile.charity_id || '');
+        setCharityPercent(profile.charity_percentage || 10);
+      }
+    };
+
+    fetchCharityData();
+  }, [user?.id]);
 
   const onProfileSave = async (data) => {
     try {
@@ -37,7 +63,7 @@ const SettingsTab = () => {
       await refreshUser();
       toast.success('Profile updated!');
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to update profile');
+      toast.error(formatError(err));
     }
   };
 
@@ -51,7 +77,7 @@ const SettingsTab = () => {
       await refreshUser();
       toast.success('Charity preferences updated!');
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to update charity');
+      toast.error(formatError(err));
     } finally {
       setSavingCharity(false);
     }
@@ -60,11 +86,35 @@ const SettingsTab = () => {
   const handleCancelSubscription = async () => {
     setCancelling(true);
     try {
-      await subscriptionAPI.cancel();
+      if (subscription?.stripe_subscription_id) {
+        const response = await fetch('/api/subscriptions/cancel', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`
+          },
+          body: JSON.stringify({ 
+            subscriptionId: subscription.stripe_subscription_id 
+          })
+        });
+
+        if (!response.ok) {
+          const err = await response.json();
+          throw new Error(err.message);
+        }
+      }
+
+      // Optimistic update for both Stripe and manual subscriptions
+      await supabase
+        .from('profiles')
+        .update({ subscription_status: 'cancelled' })
+        .eq('id', user.id);
+
+      await refetchSubscription();
       toast.success('Subscription will cancel at end of current period');
       setCancelConfirm(false);
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to cancel subscription');
+      toast.error(formatError(err));
     } finally {
       setCancelling(false);
     }
@@ -97,7 +147,7 @@ const SettingsTab = () => {
             </div>
             <div>
               <label className="text-warm-white/50 text-xs font-medium block mb-1.5">Email Address</label>
-              <input value={user?.email} disabled className="input-glass opacity-50 cursor-not-allowed" />
+              <input value={user?.email || ''} disabled className="input-glass opacity-50 cursor-not-allowed" />
               <p className="text-warm-white/25 text-xs mt-1">Email cannot be changed</p>
             </div>
             <button type="submit" disabled={isSubmitting} className="btn-primary !py-2.5 !px-5 !text-sm">
@@ -123,7 +173,7 @@ const SettingsTab = () => {
               >
                 <option value="">No charity selected</option>
                 {charities.map((c) => (
-                  <option key={c._id} value={c._id}>{c.name}</option>
+                  <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
               </select>
             </div>
@@ -156,7 +206,7 @@ const SettingsTab = () => {
         </div>
 
         {/* Cancel Subscription */}
-        {user?.subscriptionStatus === 'active' && (
+        {isActive && (
           <div className="glass-card p-6 border-red-500/15">
             <div className="flex items-center gap-2 mb-4">
               <AlertTriangle size={16} className="text-red-400" />

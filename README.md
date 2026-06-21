@@ -12,7 +12,7 @@ A subscription-driven golf performance + charity fundraising + monthly prize dra
 
 **Frontend:** React 18 + Vite + Tailwind CSS + Framer Motion + React Router v6 + Recharts + Lucide React + Axios + React Hook Form + Zod
 
-**Backend:** Node.js + Express.js + MongoDB Atlas + Mongoose + JWT (access + refresh) + Stripe (test mode) + Nodemailer
+**Backend:** Node.js + Express.js + Supabase (PostgreSQL) + Stripe (test mode) + Nodemailer (Gmail SMTP)
 
 ---
 
@@ -34,20 +34,27 @@ cd server
 npm install
 ```
 
-Create `server/.env` (already generated — fill in real values):
+Create `server/.env` (fill in real values):
 ```env
 PORT=5000
-MONGODB_URI=mongodb+srv://...
-JWT_SECRET=your_secret
-JWT_REFRESH_SECRET=your_refresh_secret
+NODE_ENV=development
+CLIENT_URL=http://localhost:5173
+FRONTEND_URL=http://localhost:5173
+
+# Supabase
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_ANON_KEY=your_anon_key
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+
+# Stripe
 STRIPE_SECRET_KEY=sk_test_...
 STRIPE_WEBHOOK_SECRET=whsec_...
 STRIPE_MONTHLY_PRICE_ID=price_...
 STRIPE_YEARLY_PRICE_ID=price_...
-CLIENT_URL=http://localhost:5173
-EMAIL_HOST=smtp.gmail.com
-EMAIL_USER=your@email.com
-EMAIL_PASS=your_app_password
+
+# Email (Nodemailer + Gmail SMTP)
+GMAIL_USER=your_email@gmail.com
+GMAIL_APP_PASSWORD=your_app_password
 ```
 
 #### Setting up Stripe Products
@@ -80,7 +87,7 @@ CVC: Any 3 digits (e.g. 123)
 ```
 
 ### Create Admin User
-Register normally, then in MongoDB Atlas update the user's `role` field to `"admin"`.
+Register normally, then go to your Supabase Dashboard -> Table Editor -> `profiles`. Find your user row and change the `role` field from `"user"` to `"admin"`.
 
 ---
 
@@ -137,8 +144,8 @@ Register normally, then in MongoDB Atlas update the user's `role` field to `"adm
 - **Build Command:** `npm install`
 - **Start Command:** `npm start`
 - **Environment Variables:**
-  - Add all `.env` values, including `RESEND_API_KEY` and `RESEND_FROM`.
-  - Set `CLIENT_URL` to `https://golf-gives-theta.vercel.app`.
+  - Add all `.env` values, including `GMAIL_USER` and `GMAIL_APP_PASSWORD`.
+  - Set `CLIENT_URL` and `FRONTEND_URL` to `https://golf-gives-theta.vercel.app`.
   - Set `STRIPE_WEBHOOK_SECRET` to the live webhook secret from the Stripe Dashboard.
 
 ---

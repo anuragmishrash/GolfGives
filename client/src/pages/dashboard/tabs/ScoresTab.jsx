@@ -8,6 +8,9 @@ import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 import { userAPI } from '../../../api/user';
 import { useAuth } from '../../../context/AuthContext';
+import { useSubscription } from '../../../context/SubscriptionContext';
+import { formatError } from '../../../utils/errorFormatter';
+import { useNavigate } from 'react-router-dom';
 
 const scoreSchema = z.object({
   score: z.coerce.number()
@@ -42,7 +45,7 @@ const ScoreRow = ({ entry, onEdit, onDelete, index }) => (
         <Edit2 size={14} />
       </button>
       <button
-        onClick={() => onDelete(entry._id)}
+        onClick={() => onDelete(entry.id || entry._id)}
         className="p-2 rounded-lg hover:bg-red-500/10 text-warm-white/40 hover:text-red-400 transition-all"
         title="Delete score"
       >
@@ -53,32 +56,34 @@ const ScoreRow = ({ entry, onEdit, onDelete, index }) => (
 );
 
 const ScoresTab = () => {
-  const { user, refreshUser } = useAuth();
+  const { refreshUser } = useAuth();
+  const { isActive, loading: subLoading } = useSubscription();
+  const navigate = useNavigate();
   const [scores, setScores] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editingEntry, setEditingEntry] = useState(null);
   const [showForm, setShowForm] = useState(false);
 
-  const isActive = user?.subscriptionStatus === 'active';
-
-  const { register, handleSubmit, reset, setValue, formState: { errors, isSubmitting } } = useForm({
+  const { register, handleSubmit, reset, setValue, setError, formState: { errors, isSubmitting } } = useForm({
     resolver: zodResolver(scoreSchema),
   });
 
   const fetchScores = async () => {
     try {
       const res = await userAPI.getScores();
-      setScores(res.data.data);
+      setScores(res.data.data || []);
     } catch {}
     setLoading(false);
   };
 
-  useEffect(() => { fetchScores(); }, []);
+  useEffect(() => { 
+    if (isActive) fetchScores(); 
+  }, [isActive]);
 
   const onSubmit = async (data) => {
     try {
       if (editingEntry) {
-        await userAPI.updateScore(editingEntry._id, data);
+        await userAPI.updateScore(editingEntry.id || editingEntry._id, data);
         toast.success('Score updated!');
       } else {
         await userAPI.addScore(data);
@@ -90,7 +95,12 @@ const ScoresTab = () => {
       setShowForm(false);
       setEditingEntry(null);
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to save score');
+      const msg = err.response?.data?.message || err.message;
+      if (msg?.includes('already exists for this date')) {
+         setError('date', { type: 'manual', message: msg });
+      } else {
+         toast.error(formatError(err));
+      }
     }
   };
 
@@ -108,8 +118,8 @@ const ScoresTab = () => {
       toast.success('Score deleted');
       await fetchScores();
       await refreshUser();
-    } catch {
-      toast.error('Failed to delete score');
+    } catch (err) {
+      toast.error(formatError(err));
     }
   };
 
@@ -118,6 +128,25 @@ const ScoresTab = () => {
     setEditingEntry(null);
     reset();
   };
+
+  if (subLoading) {
+    return <div className="p-8 text-center text-warm-white/50">Loading...</div>;
+  }
+
+  if (!isActive) {
+    return (
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center p-12 glass-card border-red-500/20 mt-8">
+        <AlertCircle size={36} className="text-red-400 mx-auto mb-4" />
+        <h2 className="text-xl font-bold text-warm-white mb-2">Subscription Required</h2>
+        <p className="text-warm-white/50 mb-6 max-w-md mx-auto">
+          You need an active subscription to enter scores and participate in the prize draws.
+        </p>
+        <button onClick={() => navigate('/subscribe')} className="btn-primary !px-8">
+          Subscribe Now
+        </button>
+      </motion.div>
+    );
+  }
 
   return (
     <motion.div
@@ -133,23 +162,12 @@ const ScoresTab = () => {
             Enter up to 5 golf scores per month (1–45). These are your draw numbers.
           </p>
         </div>
-        {isActive && !showForm && scores.length < 5 && (
+        {!showForm && scores.length < 5 && (
           <button onClick={() => setShowForm(true)} className="btn-primary !py-2.5 !px-5 !text-sm">
             <Plus size={14} /> Add Score
           </button>
         )}
       </div>
-
-      {/* Inactive notice */}
-      {!isActive && (
-        <div className="flex items-start gap-3 bg-red-500/8 border border-red-500/20 rounded-xl p-4 mb-6">
-          <AlertCircle size={16} className="text-red-400 mt-0.5" />
-          <p className="text-warm-white/60 text-sm">
-            Active subscription required to add or modify scores.
-            <a href="/subscribe" className="text-emerald-400 hover:underline ml-1">Subscribe now →</a>
-          </p>
-        </div>
-      )}
 
       {/* Score count indicator */}
       <div className="flex items-center gap-2 mb-6">
@@ -197,10 +215,10 @@ const ScoresTab = () => {
                   type="date"
                   {...register('date')}
                   max={format(new Date(), 'yyyy-MM-dd')}
-                  className={`input-glass ${errors.date ? 'error' : ''}`}
+                  className={`input-glass ${errors.date ? 'error !border-red-500 !bg-red-500/10' : ''}`}
                   style={{ colorScheme: 'dark' }}
                 />
-                {errors.date && <p className="text-red-400 text-xs mt-1">{errors.date.message}</p>}
+                {errors.date && <p className="text-red-400 text-xs mt-1 font-medium">{errors.date.message}</p>}
               </div>
               <div className="flex items-end gap-2">
                 <button type="submit" disabled={isSubmitting} className="btn-primary !py-3 !px-5 !text-sm">
@@ -225,18 +243,16 @@ const ScoresTab = () => {
           <div className="py-16 text-center">
             <Target size={32} className="text-warm-white/15 mx-auto mb-3" />
             <p className="text-warm-white/35 text-sm">No scores entered yet.</p>
-            {isActive && (
-              <button onClick={() => setShowForm(true)} className="btn-primary !py-2.5 !px-5 !text-sm mt-4">
-                <Plus size={14} /> Add Your First Score
-              </button>
-            )}
+            <button onClick={() => setShowForm(true)} className="btn-primary !py-2.5 !px-5 !text-sm mt-4">
+              <Plus size={14} /> Add Your First Score
+            </button>
           </div>
         ) : (
           <div className="p-2">
             <AnimatePresence>
               {scores.map((entry, i) => (
                 <ScoreRow
-                  key={entry._id}
+                  key={entry.id || entry._id}
                   entry={entry}
                   index={i}
                   onEdit={handleEdit}
@@ -247,7 +263,7 @@ const ScoresTab = () => {
           </div>
         )}
 
-        {scores.length === 5 && isActive && (
+        {scores.length === 5 && (
           <div className="px-4 pb-4 pt-2">
             <div className="badge-emerald text-xs justify-center">
               ✓ You have 5 scores — you're eligible for this month's draw!

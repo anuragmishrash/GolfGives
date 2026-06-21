@@ -10,6 +10,8 @@ import CharityProfile from './pages/CharityProfile';
 import Subscribe from './pages/Subscribe';
 import Login from './pages/Login';
 import Register from './pages/Register';
+import AuthCallback from './pages/AuthCallback';
+import PaymentSuccess from './pages/PaymentSuccess';
 
 // Dashboard Layout and Tabs
 import DashboardLayout from './pages/dashboard/Dashboard';
@@ -49,6 +51,8 @@ const App = () => {
         <Route path="/subscribe" element={<Subscribe />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/auth/callback" element={<AuthCallback />} />
+        <Route path="/payment/success" element={<PaymentSuccess />} />
 
         {/* SUBSCRIBER DASHBOARD — requires login */}
         <Route path="/dashboard" element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>}>

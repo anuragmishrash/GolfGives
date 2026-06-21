@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { authAPI } from '../api/auth';
 import { userAPI } from '../api/user';
+import { supabase } from '../lib/supabase';
 
 const AuthContext = createContext(null);
 
@@ -14,14 +15,20 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const init = async () => {
       const token = localStorage.getItem('accessToken');
+      const refreshToken = localStorage.getItem('refreshToken');
       if (token) {
         try {
+          // Manually inject session into Supabase client since persistSession is false.
+          // This makes direct supabase.from() queries work!
+          await supabase.auth.setSession({ access_token: token, refresh_token: refreshToken || '' });
+          
           const res = await userAPI.getMe();
           setUser(res.data.data);
         } catch {
           // Token invalid/expired — clear storage
           localStorage.removeItem('accessToken');
           localStorage.removeItem('refreshToken');
+          await supabase.auth.signOut();
         }
       }
       setLoading(false);
@@ -34,6 +41,7 @@ export const AuthProvider = ({ children }) => {
     const { accessToken, refreshToken, user: userData } = res.data.data;
     localStorage.setItem('accessToken', accessToken);
     localStorage.setItem('refreshToken', refreshToken);
+    await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken || '' });
     setUser(userData);
     return userData;
   }, []);
@@ -43,6 +51,23 @@ export const AuthProvider = ({ children }) => {
     const { accessToken, refreshToken, user: userData } = res.data.data;
     localStorage.setItem('accessToken', accessToken);
     localStorage.setItem('refreshToken', refreshToken);
+    await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken || '' });
+    setUser(userData);
+    return userData;
+  }, []);
+
+  /**
+   * loginWithSession — called by AuthCallback after Google OAuth.
+   * Receives the Supabase session directly (no backend round-trip for auth).
+   * Still fetches the full profile from the backend to populate user state.
+   */
+  const loginWithSession = useCallback(async (session) => {
+    localStorage.setItem('accessToken', session.access_token);
+    localStorage.setItem('refreshToken', session.refresh_token);
+    await supabase.auth.setSession({ access_token: session.access_token, refresh_token: session.refresh_token || '' });
+    // Fetch the full profile via the Express backend (uses the token we just stored)
+    const res = await userAPI.getMe();
+    const userData = res.data.data;
     setUser(userData);
     return userData;
   }, []);
@@ -70,6 +95,7 @@ export const AuthProvider = ({ children }) => {
     loading,
     login,
     register,
+    loginWithSession,
     logout,
     refreshUser,
     isAuthenticated: !!user,

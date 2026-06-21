@@ -1,8 +1,7 @@
-const jwt = require('jsonwebtoken');
-const User = require('../models/User');
+const { supabase } = require('../lib/supabase');
 
 /**
- * optionalAuth — Parses JWT if present and attaches req.user.
+ * optionalAuth — Parses Supabase JWT if present and attaches req.user.
  * Does not block the request if token is missing or invalid.
  */
 const optionalAuth = async (req, res, next) => {
@@ -14,10 +13,20 @@ const optionalAuth = async (req, res, next) => {
     }
 
     const token = authHeader.split(' ')[1];
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const { data: { user: authUser }, error } = await supabase.auth.getUser(token);
 
-    const user = await User.findById(decoded.id).lean();
-    req.user = user || null;
+    if (error || !authUser) {
+      req.user = null;
+      return next();
+    }
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', authUser.id)
+      .single();
+
+    req.user = profile ? { ...profile, id: profile.id, _id: profile.id, name: profile.full_name } : null;
     next();
   } catch (err) {
     req.user = null;

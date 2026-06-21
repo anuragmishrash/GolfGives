@@ -1,17 +1,42 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { DollarSign, Trophy, CheckCircle, Clock } from 'lucide-react';
+import { DollarSign, Trophy, CheckCircle, Clock, AlertCircle } from 'lucide-react';
 import { format } from 'date-fns';
+import { useNavigate } from 'react-router-dom';
+import { useSubscription } from '../../../context/SubscriptionContext';
 import { userAPI } from '../../../api/user';
 
 const WinningsTab = () => {
+  const { isActive, loading: subLoading } = useSubscription();
+  const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!isActive) {
+      setLoading(false);
+      return;
+    }
     userAPI.getWinnings().then((res) => setData(res.data.data))
       .catch(() => {}).finally(() => setLoading(false));
-  }, []);
+  }, [isActive]);
+
+  if (subLoading) return <div className="p-8 text-center text-warm-white/50">Loading...</div>;
+
+  if (!isActive) {
+    return (
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center p-12 glass-card border-red-500/20 mt-8">
+        <AlertCircle size={36} className="text-red-400 mx-auto mb-4" />
+        <h2 className="text-xl font-bold text-warm-white mb-2">Subscription Required</h2>
+        <p className="text-warm-white/50 mb-6 max-w-md mx-auto">
+          You need an active subscription to view your winnings and payment status.
+        </p>
+        <button onClick={() => navigate('/dashboard/subscribe')} className="btn-primary !px-8">
+          Subscribe Now
+        </button>
+      </motion.div>
+    );
+  }
 
   const statusIcon = { pending: Clock, approved: CheckCircle, paid: CheckCircle };
 

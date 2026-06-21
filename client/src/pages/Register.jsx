@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { Eye, EyeOff, UserPlus, Heart } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
+import { signInWithGoogle } from '../lib/supabase';
 
 const schema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters').max(100),
@@ -26,6 +27,18 @@ const Register = () => {
   const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm({
     resolver: zodResolver(schema),
   });
+
+  const [googleError, setGoogleError] = useState(null);
+
+  const handleGoogleSignIn = async () => {
+    try {
+      setGoogleError(null);
+      await signInWithGoogle();
+    } catch (error) {
+      setGoogleError(error.message);
+      toast.error(error.message);
+    }
+  };
 
   const onSubmit = async (data) => {
     try {
@@ -85,6 +98,26 @@ const Register = () => {
 
           <h1 className="font-display text-3xl md:text-4xl text-warm-white font-bold mb-2">Create your account</h1>
           <p className="text-warm-white/40 text-sm mb-8">Join GolfGives for free — subscribe when you're ready</p>
+
+          {googleError && <p className="text-red-400 text-xs text-center mb-4">{googleError}</p>}
+          <button
+            type="button"
+            onClick={handleGoogleSignIn}
+            className="w-full flex items-center justify-center gap-3 border border-white/10 rounded-lg px-4 py-3 hover:bg-white/5 transition-colors text-warm-white font-medium"
+          >
+            <img 
+              src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" 
+              alt="Google" 
+              className="w-5 h-5" 
+            />
+            <span>Continue with Google</span>
+          </button>
+
+          <div className="flex items-center gap-3 my-6">
+            <hr className="flex-1 border-white/10" />
+            <span className="text-sm text-warm-white/40">or</span>
+            <hr className="flex-1 border-white/10" />
+          </div>
 
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
             <div>

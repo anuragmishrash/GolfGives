@@ -1,53 +1,70 @@
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
-const User = require('../models/User');
+const { supabase } = require('../lib/supabase');
 const asyncHandler = require('../utils/asyncHandler');
 const emailService = require('../services/emailService');
-
-/**
- * Generate access + refresh token pair for a user
- */
-const generateTokens = (userId) => {
-  const accessToken = jwt.sign({ id: userId }, process.env.JWT_SECRET, {
-    expiresIn: '15m',
-  });
-  const refreshToken = jwt.sign({ id: userId }, process.env.JWT_REFRESH_SECRET, {
-    expiresIn: '30d',
-  });
-  return { accessToken, refreshToken };
-};
 
 // ── POST /api/auth/register ────────────────────────────────────────────────────
 exports.register = asyncHandler(async (req, res) => {
   const { name, email, password } = req.body;
 
-  const existingUser = await User.findOne({ email }).lean();
-  if (existingUser) {
-    return res.status(409).json({ success: false, message: 'Email already registered' });
+  // Sign up with Supabase Auth
+  const { data: authData, error: signUpError } = await supabase.auth.signUp({
+    email,
+    password,
+    options: {
+      data: { full_name: name },
+    },
+  });
+
+  if (signUpError) {
+    // Handle duplicate email gracefully
+    if (signUpError.message.toLowerCase().includes('already registered') ||
+        signUpError.message.toLowerCase().includes('already exists')) {
+      return res.status(409).json({ success: false, message: 'Email already registered' });
+    }
+    return res.status(400).json({ success: false, message: signUpError.message });
   }
 
-  const passwordHash = await bcrypt.hash(password, 12);
-  const user = await User.create({ name, email, passwordHash });
+  const { user: authUser, session } = authData;
+  if (!authUser) {
+    return res.status(400).json({ success: false, message: 'Registration failed — no user returned' });
+  }
 
-  const { accessToken, refreshToken } = generateTokens(user._id);
+  // The trigger handle_new_user() auto-inserts into profiles, but we upsert to be safe
+  const { error: profileError } = await supabase
+    .from('profiles')
+    .upsert({
+      id: authUser.id,
+      email: authUser.email,
+      full_name: name,
+      role: 'subscriber',
+      subscription_status: 'inactive',
+    });
 
-  // Save refresh token
-  await User.findByIdAndUpdate(user._id, { refreshToken });
+  if (profileError) {
+    console.error('Profile creation error:', profileError.message);
+  }
+
+  // Fetch the created profile
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', authUser.id)
+    .single();
 
   // Send welcome email (non-blocking)
-  emailService.sendWelcomeEmail({ name: user.name, email: user.email });
+  emailService.sendWelcomeEmail({ name, email }).catch(console.error);
 
   res.status(201).json({
     success: true,
     data: {
-      accessToken,
-      refreshToken,
+      accessToken: session?.access_token || null,
+      refreshToken: session?.refresh_token || null,
       user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        subscriptionStatus: user.subscriptionStatus,
+        id: authUser.id,
+        name: profile?.full_name || name,
+        email: authUser.email,
+        role: profile?.role || 'subscriber',
+        subscriptionStatus: profile?.subscription_status || 'inactive',
       },
     },
   });
@@ -57,31 +74,40 @@ exports.register = asyncHandler(async (req, res) => {
 exports.login = asyncHandler(async (req, res) => {
   const { email, password } = req.body;
 
-  const user = await User.findOne({ email }).select('+passwordHash');
-  if (!user) {
+  const { data: authData, error: signInError } = await supabase.auth.signInWithPassword({
+    email,
+    password,
+  });
+
+  if (signInError || !authData?.session) {
     return res.status(401).json({ success: false, message: 'Invalid email or password' });
   }
 
-  const isMatch = await bcrypt.compare(password, user.passwordHash);
-  if (!isMatch) {
-    return res.status(401).json({ success: false, message: 'Invalid email or password' });
-  }
+  const { user: authUser, session } = authData;
 
-  const { accessToken, refreshToken } = generateTokens(user._id);
-  await User.findByIdAndUpdate(user._id, { refreshToken });
+  // Fetch full profile
+  const { data: profile, error: profileError } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', authUser.id)
+    .single();
+
+  if (profileError || !profile) {
+    return res.status(401).json({ success: false, message: 'User profile not found' });
+  }
 
   res.json({
     success: true,
     data: {
-      accessToken,
-      refreshToken,
+      accessToken: session.access_token,
+      refreshToken: session.refresh_token,
       user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        subscriptionStatus: user.subscriptionStatus,
-        subscriptionPlan: user.subscriptionPlan,
+        id: authUser.id,
+        name: profile.full_name,
+        email: authUser.email,
+        role: profile.role,
+        subscriptionStatus: profile.subscription_status,
+        subscriptionPlan: profile.subscription_plan,
       },
     },
   });
@@ -94,29 +120,23 @@ exports.refresh = asyncHandler(async (req, res) => {
     return res.status(401).json({ success: false, message: 'Refresh token required' });
   }
 
-  let decoded;
-  try {
-    decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
-  } catch {
-    return res.status(401).json({ success: false, message: 'Invalid refresh token' });
+  const { data, error } = await supabase.auth.refreshSession({ refresh_token: refreshToken });
+
+  if (error || !data?.session) {
+    return res.status(401).json({ success: false, message: 'Invalid or expired refresh token' });
   }
 
-  const user = await User.findById(decoded.id).select('+refreshToken');
-  if (!user || user.refreshToken !== refreshToken) {
-    return res.status(401).json({ success: false, message: 'Token mismatch or revoked' });
-  }
-
-  const { accessToken, refreshToken: newRefreshToken } = generateTokens(user._id);
-  await User.findByIdAndUpdate(user._id, { refreshToken: newRefreshToken });
-
-  res.json({ success: true, data: { accessToken, refreshToken: newRefreshToken } });
+  res.json({
+    success: true,
+    data: {
+      accessToken: data.session.access_token,
+      refreshToken: data.session.refresh_token,
+    },
+  });
 });
 
 // ── POST /api/auth/logout ──────────────────────────────────────────────────────
 exports.logout = asyncHandler(async (req, res) => {
-  const { refreshToken } = req.body;
-  if (refreshToken) {
-    await User.findOneAndUpdate({ refreshToken }, { refreshToken: null });
-  }
+  // Supabase stateless — just acknowledge. Frontend clears tokens.
   res.json({ success: true, message: 'Logged out successfully' });
 });

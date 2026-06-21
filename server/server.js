@@ -1,7 +1,6 @@
 // GolfGives Server Entry Point
 require('dotenv').config();
 const express = require('express');
-const mongoose = require('mongoose');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
@@ -65,25 +64,12 @@ app.get('/health', (req, res) => {
 // ── Error Handler ──────────────────────────────────────────────────────────────
 app.use(errorHandler);
 
-// ── Database + Server Start ────────────────────────────────────────────────────
-const startServer = async () => {
-  try {
-    await mongoose.connect(process.env.MONGODB_URI, {
-      serverSelectionTimeoutMS: 10000,
-    });
-    console.log('✅ MongoDB Atlas connected');
-
-    const PORT = process.env.PORT || 5000;
-    app.listen(PORT, () => {
-      console.log(`🚀 GolfGives API running on port ${PORT}`);
-      startRenewalScheduler();
-    });
-  } catch (err) {
-    console.error('❌ Failed to connect to MongoDB:', err.message);
-    process.exit(1);
-  }
-};
-
-startServer();
+// ── Server Start (no DB connect needed — Supabase is HTTP-based) ──────────────
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => {
+  console.log(`🚀 GolfGives API running on port ${PORT}`);
+  console.log(`🗄️  Database: Supabase (${process.env.SUPABASE_URL})`);
+  startRenewalScheduler();
+});
 
 module.exports = app;
