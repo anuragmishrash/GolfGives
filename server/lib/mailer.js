@@ -15,7 +15,9 @@ if (!gmailUser || !gmailPass) {
 }
 
 const transporter = nodemailer.createTransport({
-  service: 'gmail',
+  host: 'smtp.gmail.com',
+  port: 587,
+  secure: false, // STARTTLS
   auth: {
     user: gmailUser,
     pass: gmailPass,
