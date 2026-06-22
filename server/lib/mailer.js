@@ -6,40 +6,47 @@ const dns = require('dns');
 const gmailUser = process.env.GMAIL_USER;
 const gmailPass = (process.env.GMAIL_APP_PASSWORD || '').replace(/\s/g, '');
 
-if (!gmailUser || !gmailPass) {
-  console.error('[Email] ⚠️  GMAIL_USER or GMAIL_APP_PASSWORD is missing from environment variables!');
-  console.error('[Email] ⚠️  GMAIL_USER:', gmailUser ? 'SET ✓' : 'MISSING ✗');
-  console.error('[Email] ⚠️  GMAIL_APP_PASSWORD:', gmailPass ? 'SET ✓' : 'MISSING ✗');
+const hasApiKey = process.env.BREVO_API_KEY || process.env.RESEND_API_KEY;
+let transporter = null;
+
+if (hasApiKey) {
+  console.log(`[Email] 🚀 HTTP API key detected (${process.env.BREVO_API_KEY ? 'Brevo' : 'Resend'}). Bypassing SMTP initialization.`);
 } else {
-  console.log(`[Email] 🔧 Initializing Gmail SMTP as ${gmailUser} (password length: ${gmailPass.length})`);
-}
-
-const transporter = nodemailer.createTransport({
-  host: 'smtp.gmail.com',
-  port: 587,
-  secure: false, // STARTTLS
-  auth: {
-    user: gmailUser,
-    pass: gmailPass,
-  },
-  connectionTimeout: 5000, // 5 seconds
-  greetingTimeout: 5000,
-  socketTimeout: 5000,
-  // Force IPv4 lookup because Render's container network does not route IPv6
-  lookup: (hostname, options, callback) => {
-    dns.lookup(hostname, { family: 4 }, callback);
-  },
-});
-
-// Verify connection on server start — log clearly whether it works
-transporter.verify((error) => {
-  if (error) {
-    console.error('[Email] ❌ Gmail SMTP connection FAILED:', error.message);
-    console.error('[Email] ❌ Check GMAIL_USER and GMAIL_APP_PASSWORD in your environment variables.');
+  if (!gmailUser || !gmailPass) {
+    console.error('[Email] ⚠️  GMAIL_USER or GMAIL_APP_PASSWORD is missing from environment variables!');
+    console.error('[Email] ⚠️  GMAIL_USER:', gmailUser ? 'SET ✓' : 'MISSING ✗');
+    console.error('[Email] ⚠️  GMAIL_APP_PASSWORD:', gmailPass ? 'SET ✓' : 'MISSING ✗');
   } else {
-    console.log('[Email] ✅ Gmail SMTP service ready — emails will be sent successfully');
+    console.log(`[Email] 🔧 Initializing Gmail SMTP as ${gmailUser} (password length: ${gmailPass.length})`);
+    
+    transporter = nodemailer.createTransport({
+      host: 'smtp.gmail.com',
+      port: 587,
+      secure: false, // STARTTLS
+      auth: {
+        user: gmailUser,
+        pass: gmailPass,
+      },
+      connectionTimeout: 5000, // 5 seconds
+      greetingTimeout: 5000,
+      socketTimeout: 5000,
+      // Force IPv4 lookup because Render's container network does not route IPv6
+      lookup: (hostname, options, callback) => {
+        dns.lookup(hostname, { family: 4 }, callback);
+      },
+    });
+
+    // Verify connection on server start — log clearly whether it works
+    transporter.verify((error) => {
+      if (error) {
+        console.error('[Email] ❌ Gmail SMTP connection FAILED:', error.message);
+        console.error('[Email] ❌ Check GMAIL_USER and GMAIL_APP_PASSWORD in your environment variables.');
+      } else {
+        console.log('[Email] ✅ Gmail SMTP service ready — emails will be sent successfully');
+      }
+    });
   }
-});
+}
 
 /**
  * Send an email via Brevo, Resend (HTTP APIs) or Gmail SMTP.
@@ -110,6 +117,10 @@ const sendEmail = async ({ to, subject, html }) => {
   }
 
   // ── 3. Standard SMTP Fallback ───────────────────────────────────────────
+  if (!transporter) {
+    console.error(`[Email] ❌ Failed to send email "${subject}" → ${to}: SMTP is not initialized (HTTP API was bypassed and failed).`);
+    return { success: false, error: 'SMTP not initialized' };
+  }
   try {
     const info = await transporter.sendMail({
       from: `"GolfGives" <${gmailUser}>`,
