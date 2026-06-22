@@ -135,6 +135,8 @@ Register normally, then go to your Supabase Dashboard -> Table Editor -> `profil
 - **Environment Variables:**
   - `VITE_API_URL` = `https://golfgives-api.onrender.com`
   - `VITE_STRIPE_PUBLISHABLE_KEY` = `your_stripe_pk`
+  - `VITE_SUPABASE_URL` = `https://your-project.supabase.co`
+  - `VITE_SUPABASE_ANON_KEY` = `your_anon_key`
 - The project includes a `vercel.json` file to handle React Router client-side routing.
 
 ### Backend → Render

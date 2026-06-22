@@ -20,8 +20,23 @@ const app = express();
 // ── Security & Utility Middleware ──────────────────────────────────────────────
 app.use(helmet());
 app.use(morgan('dev'));
+// Build allowed origins list — always include both prod and localhost
+const allowedOrigins = [
+  'https://golf-gives-theta.vercel.app',
+  'http://localhost:5173',
+  'http://localhost:3000',
+  // also respect CLIENT_URL / FRONTEND_URL env vars in case they differ
+  process.env.CLIENT_URL,
+  process.env.FRONTEND_URL,
+].filter(Boolean).map(o => o.replace(/\/$/, ''));
+
 app.use(cors({
-  origin: (process.env.CLIENT_URL || 'http://localhost:5173').replace(/\/$/, ''),
+  origin: (origin, callback) => {
+    // Allow requests with no origin (Stripe webhooks, Render health checks, curl)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    return callback(new Error(`CORS blocked: ${origin}`));
+  },
   credentials: true,
 }));
 

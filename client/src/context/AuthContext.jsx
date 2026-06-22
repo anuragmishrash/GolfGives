@@ -38,22 +38,29 @@ export const AuthProvider = ({ children }) => {
 
   const login = useCallback(async (email, password) => {
     const res = await authAPI.login({ email, password });
-    const { accessToken, refreshToken, user: userData } = res.data.data;
+    const { accessToken, refreshToken } = res.data.data;
     localStorage.setItem('accessToken', accessToken);
     localStorage.setItem('refreshToken', refreshToken);
     await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken || '' });
-    setUser(userData);
-    return userData;
+    // Always fetch the FULL profile from /user/me — the login response is partial
+    // and missing stripeSubscriptionId, stripeCustomerId etc.
+    const profileRes = await userAPI.getMe();
+    const fullUser = profileRes.data.data;
+    setUser(fullUser);
+    return fullUser;
   }, []);
 
   const register = useCallback(async (name, email, password) => {
     const res = await authAPI.register({ name, email, password });
-    const { accessToken, refreshToken, user: userData } = res.data.data;
+    const { accessToken, refreshToken } = res.data.data;
     localStorage.setItem('accessToken', accessToken);
     localStorage.setItem('refreshToken', refreshToken);
     await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken || '' });
-    setUser(userData);
-    return userData;
+    // Always fetch the FULL profile from /user/me
+    const profileRes = await userAPI.getMe();
+    const fullUser = profileRes.data.data;
+    setUser(fullUser);
+    return fullUser;
   }, []);
 
   /**
@@ -78,6 +85,8 @@ export const AuthProvider = ({ children }) => {
     } catch { /* ignore */ }
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');
+    // Clear supabase in-memory session too
+    try { await supabase.auth.signOut(); } catch { /* ignore */ }
     setUser(null);
   }, []);
 

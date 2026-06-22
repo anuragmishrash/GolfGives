@@ -217,7 +217,7 @@ exports.handleWebhook = async (req, res) => {
           .from('profiles')
           .update({
             subscription_status: status,
-            subscription_renewal_date: new Date(sub.current_period_end * 1000).toISOString(),
+            subscription_renewal_date: sub.current_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null,
             renewal_reminder_sent: false,
           })
           .eq('id', userId);
