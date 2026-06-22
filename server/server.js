@@ -16,6 +16,7 @@ const errorHandler = require('./middleware/errorHandler');
 const { startRenewalScheduler } = require('./services/renewalScheduler');
 
 const app = express();
+app.set('trust proxy', 1); // trust first proxy (Render load balancer)
 
 // ── Security & Utility Middleware ──────────────────────────────────────────────
 app.use(helmet());
