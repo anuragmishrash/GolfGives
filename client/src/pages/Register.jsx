@@ -42,11 +42,18 @@ const Register = () => {
 
   const onSubmit = async (data) => {
     try {
-      await authRegister(data.name, data.email, data.password);
-      toast.success('Account created! Welcome to GolfGives 🎉');
-      navigate('/subscribe');
+      const result = await authRegister(data.name, data.email, data.password);
+      if (result?.emailVerificationRequired) {
+        toast.success('Account created! Please check your email to verify your account before signing in. 📧', {
+          duration: 6000,
+        });
+        navigate('/login');
+      } else {
+        toast.success('Account created! Welcome to GolfGives 🎉');
+        navigate('/subscribe');
+      }
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Registration failed. Please try again.');
+      toast.error(err.response?.data?.message || err.message || 'Registration failed. Please try again.');
     }
   };
 

@@ -53,6 +53,12 @@ export const AuthProvider = ({ children }) => {
   const register = useCallback(async (name, email, password) => {
     const res = await authAPI.register({ name, email, password });
     const { accessToken, refreshToken } = res.data.data;
+    
+    if (!accessToken) {
+      // Email confirmation is required by Supabase Auth
+      return { emailVerificationRequired: true };
+    }
+
     localStorage.setItem('accessToken', accessToken);
     localStorage.setItem('refreshToken', refreshToken);
     await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken || '' });
