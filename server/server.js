@@ -76,6 +76,34 @@ app.get('/health', (req, res) => {
   res.json({ success: true, message: 'GolfGives API is running', timestamp: new Date() });
 });
 
+// Email configuration health check and test
+app.get('/health/email', async (req, res) => {
+  try {
+    const { transporter } = require('./lib/mailer');
+    const gmailUser = process.env.GMAIL_USER;
+    const gmailPass = process.env.GMAIL_APP_PASSWORD;
+    const parsedPass = (gmailPass || '').replace(/\s/g, '');
+
+    let verifyError = null;
+    try {
+      await transporter.verify();
+    } catch (err) {
+      verifyError = err.message;
+    }
+
+    res.json({
+      success: verifyError === null,
+      gmailUser: gmailUser ? `${gmailUser.substring(0, 3)}...${gmailUser.split('@')[1]}` : 'MISSING',
+      gmailPassLength: gmailPass ? gmailPass.length : 0,
+      gmailPassStrippedLength: parsedPass.length,
+      smtpVerified: verifyError === null,
+      error: verifyError,
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // ── Error Handler ──────────────────────────────────────────────────────────────
 app.use(errorHandler);
 

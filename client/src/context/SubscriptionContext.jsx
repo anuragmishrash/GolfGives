@@ -1,52 +1,37 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import api from '../api/axios';
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import { useAuth } from './AuthContext';
 
 const SubscriptionContext = createContext(null);
 
 export const SubscriptionProvider = ({ children }) => {
+  const { user, loading: authLoading, refreshUser } = useAuth();
   const [subscription, setSubscription] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchSubscription = useCallback(async () => {
-    // Only fetch if we have a token — avoids wasted calls on logged-out state
-    const token = localStorage.getItem('accessToken');
-    if (!token) {
-      setSubscription(null);
-      setLoading(false);
+  useEffect(() => {
+    if (authLoading) {
+      setLoading(true);
       return;
     }
 
-    try {
-      // Use the Express backend which reads from profiles table with the real JWT
-      const res = await api.get('/user/me');
-      const profile = res.data?.data;
-      if (profile) {
-        setSubscription({
-          subscription_status: profile.subscriptionStatus,
-          subscription_plan: profile.subscriptionPlan,
-          subscription_renewal_date: profile.subscriptionRenewalDate,
-          stripe_customer_id: profile.stripeCustomerId,
-          stripe_subscription_id: profile.stripeSubscriptionId,
-        });
-      } else {
-        setSubscription(null);
-      }
-    } catch (err) {
-      // 401 = logged out, any other error = treat as no subscription
+    if (user) {
+      setSubscription({
+        subscription_status: user.subscriptionStatus,
+        subscription_plan: user.subscriptionPlan,
+        subscription_renewal_date: user.subscriptionRenewalDate,
+        stripe_customer_id: user.stripeCustomerId,
+        stripe_subscription_id: user.stripeSubscriptionId,
+      });
+    } else {
       setSubscription(null);
-    } finally {
-      setLoading(false);
     }
-  }, []);
-
-  useEffect(() => {
-    fetchSubscription();
-  }, [fetchSubscription]);
+    setLoading(false);
+  }, [user, authLoading]);
 
   const isActive = subscription?.subscription_status === 'active';
 
   return (
-    <SubscriptionContext.Provider value={{ subscription, loading, isActive, refetch: fetchSubscription }}>
+    <SubscriptionContext.Provider value={{ subscription, loading, isActive, refetch: refreshUser }}>
       {children}
     </SubscriptionContext.Provider>
   );

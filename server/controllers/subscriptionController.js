@@ -338,6 +338,12 @@ exports.cancelSubscription = asyncHandler(async (req, res) => {
     cancel_at_period_end: true,
   });
 
+  // Update profile status in database immediately
+  await supabase
+    .from('profiles')
+    .update({ subscription_status: 'cancelled' })
+    .eq('id', req.user.id);
+
   res.json({
     success: true,
     message: 'Subscription will be cancelled at the end of the current period',

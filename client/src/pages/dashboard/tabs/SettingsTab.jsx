@@ -8,8 +8,9 @@ import toast from 'react-hot-toast';
 import { useAuth } from '../../../context/AuthContext';
 import { useSubscription } from '../../../context/SubscriptionContext';
 import { userAPI } from '../../../api/user';
+import { charityAPI } from '../../../api/charity';
+import { subscriptionAPI } from '../../../api/subscription';
 import { formatError } from '../../../utils/errorFormatter';
-import { supabase } from '../../../lib/supabase';
 
 const profileSchema = z.object({ name: z.string().min(2, 'Name must be at least 2 characters') });
 
@@ -31,31 +32,24 @@ const SettingsTab = () => {
 
   useEffect(() => {
     const fetchCharityData = async () => {
-      if (!user?.id) return;
-      
-      // Fetch charities list
-      const { data: charitiesList } = await supabase
-        .from('charities')
-        .select('id, name')
-        .order('name');
-        
-      setCharities(charitiesList || []);
+      try {
+        const res = await charityAPI.getCharities({ limit: 100 });
+        setCharities(res.data?.data || []);
+      } catch (err) {
+        console.error('Failed to fetch charities:', err);
+      }
 
-      // Fetch user's current charity preferences directly
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('charity_id, charity_percentage')
-        .eq('id', user.id)
-        .single();
-
-      if (profile) {
-        setSelectedCharity(profile.charity_id || '');
-        setCharityPercent(profile.charity_percentage || 10);
+      if (user) {
+        const charityId = typeof user.selectedCharityId === 'object'
+          ? user.selectedCharityId?.id
+          : user.selectedCharityId;
+        setSelectedCharity(charityId || '');
+        setCharityPercent(user.charityContributionPercent || 10);
       }
     };
 
     fetchCharityData();
-  }, [user?.id]);
+  }, [user]);
 
   const onProfileSave = async (data) => {
     try {
@@ -87,28 +81,8 @@ const SettingsTab = () => {
     setCancelling(true);
     try {
       if (subscription?.stripe_subscription_id) {
-        const response = await fetch('/api/subscriptions/cancel', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`
-          },
-          body: JSON.stringify({ 
-            subscriptionId: subscription.stripe_subscription_id 
-          })
-        });
-
-        if (!response.ok) {
-          const err = await response.json();
-          throw new Error(err.message);
-        }
+        await subscriptionAPI.cancel();
       }
-
-      // Optimistic update for both Stripe and manual subscriptions
-      await supabase
-        .from('profiles')
-        .update({ subscription_status: 'cancelled' })
-        .eq('id', user.id);
 
       await refetchSubscription();
       toast.success('Subscription will cancel at end of current period');
