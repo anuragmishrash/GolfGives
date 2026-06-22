@@ -42,7 +42,7 @@ transporter.verify((error) => {
 });
 
 /**
- * Send an email via Gmail SMTP.
+ * Send an email via Brevo, Resend (HTTP APIs) or Gmail SMTP.
  * This NEVER throws — it returns { success, messageId?, error? }
  */
 const sendEmail = async ({ to, subject, html }) => {
@@ -50,6 +50,66 @@ const sendEmail = async ({ to, subject, html }) => {
     console.error(`[Email] ❌ No recipient address for "${subject}" — email skipped`);
     return { success: false, error: 'No recipient address' };
   }
+
+  // ── 1. Brevo HTTP API Fallback ──────────────────────────────────────────
+  if (process.env.BREVO_API_KEY) {
+    try {
+      const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: {
+          'api-key': process.env.BREVO_API_KEY,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          sender: { name: 'GolfGives', email: gmailUser || 'support@golfgives.com' },
+          to: [{ email: to }],
+          subject,
+          htmlContent: html,
+        }),
+      });
+
+      const data = await response.json();
+      if (response.ok) {
+        console.log(`[Email] ✅ Sent via Brevo HTTP API "${subject}" → ${to} (${data.messageId || 'Success'})`);
+        return { success: true, messageId: data.messageId };
+      } else {
+        throw new Error(data.message || JSON.stringify(data));
+      }
+    } catch (error) {
+      console.error(`[Email] ❌ Failed via Brevo HTTP API "${subject}" → ${to}:`, error.message);
+    }
+  }
+
+  // ── 2. Resend HTTP API Fallback ─────────────────────────────────────────
+  if (process.env.RESEND_API_KEY) {
+    try {
+      const response = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          from: `GolfGives <${process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev'}>`,
+          to: [to],
+          subject,
+          html,
+        }),
+      });
+
+      const data = await response.json();
+      if (response.ok) {
+        console.log(`[Email] ✅ Sent via Resend HTTP API "${subject}" → ${to} (${data.id})`);
+        return { success: true, messageId: data.id };
+      } else {
+        throw new Error(data.message || JSON.stringify(data));
+      }
+    } catch (error) {
+      console.error(`[Email] ❌ Failed via Resend HTTP API "${subject}" → ${to}:`, error.message);
+    }
+  }
+
+  // ── 3. Standard SMTP Fallback ───────────────────────────────────────────
   try {
     const info = await transporter.sendMail({
       from: `"GolfGives" <${gmailUser}>`,
@@ -57,10 +117,10 @@ const sendEmail = async ({ to, subject, html }) => {
       subject,
       html,
     });
-    console.log(`[Email] ✅ Sent "${subject}" → ${to} (${info.messageId})`);
+    console.log(`[Email] ✅ Sent via Gmail SMTP "${subject}" → ${to} (${info.messageId})`);
     return { success: true, messageId: info.messageId };
   } catch (error) {
-    console.error(`[Email] ❌ Failed "${subject}" → ${to}:`, error.message);
+    console.error(`[Email] ❌ Failed via Gmail SMTP "${subject}" → ${to}:`, error.message);
     return { success: false, error: error.message };
   }
 };
