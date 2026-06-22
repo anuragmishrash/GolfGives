@@ -79,25 +79,52 @@ app.get('/health', (req, res) => {
 // Email configuration health check and test
 app.get('/health/email', async (req, res) => {
   try {
-    const { transporter } = require('./lib/mailer');
+    const { transporter, sendEmail } = require('./lib/mailer');
     const gmailUser = process.env.GMAIL_USER;
     const gmailPass = process.env.GMAIL_APP_PASSWORD;
     const parsedPass = (gmailPass || '').replace(/\s/g, '');
+    const testRecipient = req.query.test;
 
+    // Hard 4-second timeout for verification
     let verifyError = null;
+    let smtpVerified = false;
     try {
-      await transporter.verify();
+      const verifyPromise = transporter.verify();
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('SMTP connection timed out (4s hard limit)')), 4000)
+      );
+      await Promise.race([verifyPromise, timeoutPromise]);
+      smtpVerified = true;
     } catch (err) {
       verifyError = err.message;
     }
 
+    // Optional test email send
+    let testResult = null;
+    if (testRecipient) {
+      try {
+        const sendPromise = sendEmail({
+          to: testRecipient,
+          subject: '⛳ GolfGives SMTP Test Email',
+          html: '<p>If you see this, email sending works perfectly from the server! 🎉</p>',
+        });
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Send email timed out (4s hard limit)')), 4000)
+        );
+        testResult = await Promise.race([sendPromise, timeoutPromise]);
+      } catch (err) {
+        testResult = { success: false, error: err.message };
+      }
+    }
+
     res.json({
-      success: verifyError === null,
+      success: smtpVerified && (!testRecipient || testResult?.success),
       gmailUser: gmailUser ? `${gmailUser.substring(0, 3)}...${gmailUser.split('@')[1]}` : 'MISSING',
       gmailPassLength: gmailPass ? gmailPass.length : 0,
       gmailPassStrippedLength: parsedPass.length,
-      smtpVerified: verifyError === null,
-      error: verifyError,
+      smtpVerified,
+      verifyError,
+      testResult,
     });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
