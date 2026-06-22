@@ -79,52 +79,62 @@ app.get('/health', (req, res) => {
 // Email configuration health check and test
 app.get('/health/email', async (req, res) => {
   try {
-    const { transporter, sendEmail } = require('./lib/mailer');
+    const nodemailer = require('nodemailer');
+    const dns = require('dns');
     const gmailUser = process.env.GMAIL_USER;
     const gmailPass = process.env.GMAIL_APP_PASSWORD;
     const parsedPass = (gmailPass || '').replace(/\s/g, '');
-    const testRecipient = req.query.test;
 
-    // Hard 4-second timeout for verification
-    let verifyError = null;
-    let smtpVerified = false;
+    const transporter465 = nodemailer.createTransport({
+      host: 'smtp.gmail.com',
+      port: 465,
+      secure: true,
+      auth: { user: gmailUser, pass: parsedPass },
+      connectionTimeout: 3000,
+      greetingTimeout: 3000,
+      socketTimeout: 3000,
+      lookup: (hostname, options, callback) => dns.lookup(hostname, { family: 4 }, callback),
+    });
+
+    const transporter587 = nodemailer.createTransport({
+      host: 'smtp.gmail.com',
+      port: 587,
+      secure: false, // STARTTLS
+      auth: { user: gmailUser, pass: parsedPass },
+      connectionTimeout: 3000,
+      greetingTimeout: 3000,
+      socketTimeout: 3000,
+      lookup: (hostname, options, callback) => dns.lookup(hostname, { family: 4 }, callback),
+    });
+
+    // Test port 465
+    let err465 = null;
     try {
-      const verifyPromise = transporter.verify();
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('SMTP connection timed out (4s hard limit)')), 4000)
-      );
-      await Promise.race([verifyPromise, timeoutPromise]);
-      smtpVerified = true;
+      await Promise.race([
+        transporter465.verify(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout 3s')), 3000))
+      ]);
     } catch (err) {
-      verifyError = err.message;
+      err465 = err.message;
     }
 
-    // Optional test email send
-    let testResult = null;
-    if (testRecipient) {
-      try {
-        const sendPromise = sendEmail({
-          to: testRecipient,
-          subject: '⛳ GolfGives SMTP Test Email',
-          html: '<p>If you see this, email sending works perfectly from the server! 🎉</p>',
-        });
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Send email timed out (4s hard limit)')), 4000)
-        );
-        testResult = await Promise.race([sendPromise, timeoutPromise]);
-      } catch (err) {
-        testResult = { success: false, error: err.message };
-      }
+    // Test port 587
+    let err587 = null;
+    try {
+      await Promise.race([
+        transporter587.verify(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout 3s')), 3000))
+      ]);
+    } catch (err) {
+      err587 = err.message;
     }
 
     res.json({
-      success: smtpVerified && (!testRecipient || testResult?.success),
       gmailUser: gmailUser ? `${gmailUser.substring(0, 3)}...${gmailUser.split('@')[1]}` : 'MISSING',
       gmailPassLength: gmailPass ? gmailPass.length : 0,
       gmailPassStrippedLength: parsedPass.length,
-      smtpVerified,
-      verifyError,
-      testResult,
+      port465: { verified: err465 === null, error: err465 },
+      port587: { verified: err587 === null, error: err587 },
     });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
