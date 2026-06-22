@@ -1,4 +1,5 @@
 const nodemailer = require('nodemailer');
+const dns = require('dns');
 
 // Strip spaces from app password — Google accepts them with or without spaces,
 // but some SMTP relay layers reject them. This ensures maximum compatibility.
@@ -22,6 +23,10 @@ const transporter = nodemailer.createTransport({
   connectionTimeout: 5000, // 5 seconds
   greetingTimeout: 5000,
   socketTimeout: 5000,
+  // Force IPv4 lookup because Render's container network does not route IPv6
+  lookup: (hostname, options, callback) => {
+    dns.lookup(hostname, { family: 4 }, callback);
+  },
 });
 
 // Verify connection on server start — log clearly whether it works
